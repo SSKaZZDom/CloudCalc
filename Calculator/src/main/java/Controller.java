@@ -1,5 +1,7 @@
 import com.google.gson.Gson;
 import org.springframework.web.bind.annotation.*;
+
+import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
 
 @RestController
@@ -26,7 +28,11 @@ public class Controller {
         CompletableFuture<String> result = CompletableFuture.supplyAsync(() -> {
             Gson gson = new Gson();
             TreeNode tree = gson.fromJson(str, TreeNode.class);
-            return Integer.toString(interpreter.evaluate(tree));
+            try {
+                return interpreter.evaluate(tree).toString();
+            } catch (IOException | ArgumentsException e) {
+                throw new RuntimeException(e);
+            }
         });
         return result;
     }

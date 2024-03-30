@@ -43,4 +43,10 @@ public class TreeNode {
     public int getDepth() {
         return this.depth;
     }
+    public void setValue(String value) {
+        this.value = value;
+    }
+    public void nullChildren() {
+        this.children = null;
+    }
 }
