@@ -525,9 +525,11 @@ public class Interpreter {
     private Set<String> search(TreeNode tree) {
         Set<String> res = new HashSet<>();
         List<String> names = new ArrayList<>();
+        List<String> bodies = new ArrayList<>();
         for (String fun : funs) {
             String[] words = fun.split(" ", 2);
             names.add(words[0]);
+            bodies.add(words[1]);
         }
         searchRec(tree, res, names);
         return res;
@@ -535,10 +537,24 @@ public class Interpreter {
 
     private void searchRec(TreeNode tree, Set<String> set, List<String> names) {
         if (names.contains(tree.getValue())) {
-            set.add(funs.get(names.indexOf(tree.getValue())));
+            if (!set.contains(funs.get(names.indexOf(tree.getValue())))) {
+                set.add(funs.get(names.indexOf(tree.getValue())));
+                searchFun(funs.get(names.indexOf(tree.getValue())), set, names);
+            }
         }
         for (TreeNode child : tree.getList()) {
             searchRec(child, set, names);
+        }
+    }
+
+    private void searchFun(String fun, Set<String> set, List<String> names) {
+        String[] words = fun.split(" ", 2);
+        String body = words[1];
+        for (String name:names){
+            if (body.contains(name) && !set.contains(funs.get(names.indexOf(name)))) {
+                set.add(funs.get(names.indexOf(name)));
+                searchFun(funs.get(names.indexOf(name)), set, names);
+            }
         }
     }
 }
