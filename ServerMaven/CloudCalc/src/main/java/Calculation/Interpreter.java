@@ -17,6 +17,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
+import static java.lang.Thread.sleep;
+
 public class Interpreter {
     private List<String> funs;
     private final Map<String, Function> functions = new HashMap<>();
@@ -27,7 +29,7 @@ public class Interpreter {
             addFunction(function);
         }
         functions.put("+", args -> {
-            if (args.get(0) != null) {
+            if (!args.isEmpty()) {
                 List<Integer> sumL = new ArrayList<>();
                 int sum = 0;
                 int size = 0;
@@ -66,7 +68,7 @@ public class Interpreter {
         functions.put("-", args -> {
             if (args.size() > 2) {
                 throw new ArgumentsException("Too many arguments");
-            } else if (args.get(0) != null) {
+            } else if (!args.isEmpty()) {
                 if (args.get(0).getType().equals("int") && args.get(1).getType().equals("int")) {
                     return new IntElem(args.get(0).getValue().get(0) - args.get(1).getValue().get(0));
                 }
@@ -92,7 +94,7 @@ public class Interpreter {
             throw new ArgumentsException("There are no arguments");
         });
         functions.put("*", args -> {
-            if (args.get(0) != null) {
+            if (!args.isEmpty()) {
                 List<Integer> multL = new ArrayList<>();
                 int mult = 0;
                 int size;
@@ -131,7 +133,7 @@ public class Interpreter {
         functions.put("/", args -> {
             if (args.size() > 2) {
                 throw new ArgumentsException("Too many arguments");
-            } else if (args.get(0) != null) {
+            } else if (!args.isEmpty()) {
                 if (args.get(0).getType().equals("int") && args.get(1).getType().equals("int")) {
                     return new IntElem(args.get(0).getValue().get(0) / args.get(1).getValue().get(0));
                 }
@@ -159,7 +161,7 @@ public class Interpreter {
         functions.put("**", args -> {
             if (args.size() > 2) {
                 throw new ArgumentsException("Too many arguments");
-            } else if (args.get(0) != null) {
+            } else if (!args.isEmpty()) {
                 System.out.println(args.get(0).getType());
                 System.out.println(args.get(1).getType());
                 if (args.get(0).getType().equals("int") && args.get(1).getType().equals("int")) {
@@ -402,22 +404,30 @@ public class Interpreter {
         String list = "";
         for (String element : subs) {
             if (element.startsWith("(") && element.length() > 1) {
-                tokens.add("(");
-                element = element.substring(1);
-                if (!functions.containsKey(element)) {
-                    throw new ArgumentsException("Arguments order is wrong");
+                while (element.startsWith("(")) {
+                    tokens.add("(");
+                    element = element.substring(1);
                 }
                 if(element.startsWith("[") && flag) {
                     throw new ArgumentsException("There should be no nested lists in your expression");
                 } else if (element.startsWith("[")) {
                     flag = true;
                     list += element;
+                    if (list.endsWith("]")) {
+                        flag = false;
+                        tokens.add(list);
+                        list = "";
+                    }
                 } else {
                     tokens.add(element);
                 }
             }
-            else if (element.endsWith(")") && element.length() > 1) {
-                element = element.substring(0, element.length() - 1);
+            else if (element.endsWith(")")) {
+                int cnt = 0;
+                while (element.endsWith(")")) {
+                    element = element.substring(0, element.length() - 1);
+                    cnt++;
+                }
                 if(element.startsWith("[") && flag) {
                     throw new ArgumentsException("There should be no nested lists in your expression");
                 } else if (element.startsWith("[")) {
@@ -430,10 +440,12 @@ public class Interpreter {
                         tokens.add(list);
                         list = "";
                     }
-                } else {
+                } else if (!element.isEmpty()){
                     tokens.add(element);
                 }
-                tokens.add(")");
+                for (int i = 0; i < cnt; i++) {
+                    tokens.add(")");
+                }
             }
             else {
                 if(element.startsWith("[") && flag) {
@@ -453,8 +465,60 @@ public class Interpreter {
                 }
             }
         }
+        List<String> sub;
+        List<String> ends;
+        int mapCnt = -1;
+        int size;
+        while(tokens.contains("map")) {
+            int st = tokens.indexOf("map") - 1;
+            int end = 0;
+            sub = new ArrayList<>();
+            for (int i = st; i < tokens.size(); i++){
+                if (tokens.get(i).equals("(")) {
+                    mapCnt++;
+                } else if (tokens.get(i).equals(")")) {
+                    mapCnt--;
+                    if (mapCnt == -1) {
+                        sub.add(tokens.get(i));
+                        end = i;
+                        break;
+                    }
+                }
+                sub.add(tokens.get(i));
+            }
+            size = tokens.size();
+            sub = mapParser(sub);
+            ends = tokens.subList(end + 1, size);
+            tokens = tokens.subList(0, st);
+            sub.addAll(ends);
+            tokens.addAll(sub);
+
+        }
+        System.out.println(tokens);
         res = createTree(tokens);
         return res; 
+    }
+
+    private List<String> mapParser(List<String> tokens) {
+        List<String> res = new ArrayList<>();
+        int mapCnt = 0;
+        String fun = tokens.get(2);
+        for (int i = 3; i < tokens.size() - 1; i++) {
+            if (tokens.get(i).equals("(")){
+                mapCnt++;
+                res.add(tokens.get(i));
+                if (mapCnt == 1) {
+                    res.add(fun);
+                }
+            } else if(tokens.get(i).equals(")")){
+                res.add(tokens.get(i));
+                mapCnt--;
+            } else {
+                res.add(tokens.get(i));
+            }
+
+        }
+        return res;
     }
 
     /***
@@ -464,22 +528,27 @@ public class Interpreter {
      */
     private TreeNode createTree (List<String> list) {
         TreeNode res = new TreeNode(list.get(1), null, true, 1);
-        boolean flag = false;
+        int cnt = 0;
         String element;
         List<String> sub = null;
         for (int i = 2; i < list.size() - 1; i++) {
             element = list.get(i);
-            if (flag) {
+            if (cnt > 0) {
                 sub.add(element);
+                if (element.equals("(")) {
+                    cnt++;
+                }
                 if (element.equals(")")) {
-                    flag = false;
-                    res.addChild(createTree(sub));
+                    cnt--;
+                    if (cnt == 0) {
+                        res.addChild(createTree(sub));
+                    }
                 }
             } else {
                 if (element.equals("(")) {
                     sub = new ArrayList<>();
                     sub.add(element);
-                    flag = true;
+                    cnt++;
                 } else {
                     res.addChild(new TreeNode(element, res, true, res.getDepth() + 1));
                 }
@@ -516,6 +585,8 @@ public class Interpreter {
             }
         }
         try {
+            System.out.println(tree.getValue());
+            System.out.println(operands);
             return functions.get(tree.getValue()).apply(operands);
         } catch (ArgumentsException e) {
             throw new RuntimeException(e);
@@ -550,7 +621,7 @@ public class Interpreter {
     private void searchFun(String fun, Set<String> set, List<String> names) {
         String[] words = fun.split(" ", 2);
         String body = words[1];
-        for (String name:names){
+        for (String name : names) {
             if (body.contains(name) && !set.contains(funs.get(names.indexOf(name)))) {
                 set.add(funs.get(names.indexOf(name)));
                 searchFun(funs.get(names.indexOf(name)), set, names);
